@@ -1,0 +1,4 @@
+interface:
+  display_name: "Render Loop Iteration"
+  short_description: "Codex screenshot iteration via a shared render daemon"
+  default_prompt: "Use $render-loop-screenshot-iteration when iterating on webpage screenshots through the local render-loop daemon from Codex CLI."

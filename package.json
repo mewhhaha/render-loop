@@ -1,0 +1,17 @@
+{
+  "name": "render-loop",
+  "version": "0.1.0",
+  "description": "Persistent Playwright render daemon for fast repeated webpage renders",
+  "type": "module",
+  "bin": {
+    "render-loop": "./src/cli.js"
+  },
+  "scripts": {
+    "serve": "node ./src/cli.js serve",
+    "render": "node ./src/cli.js render",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2"
+  }
+}
