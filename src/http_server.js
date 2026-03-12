@@ -141,6 +141,15 @@ async function handleRequest(service, request, response) {
       return;
     }
 
+    if (result.contentType.startsWith("application/json")) {
+      response.writeHead(200, {
+        "content-length": String(result.bytes.length),
+        "content-type": result.contentType,
+      });
+      response.end(result.bytes);
+      return;
+    }
+
     const { meta, bytes } = splitArtifact(result);
     response.writeHead(200, {
       "content-length": String(bytes.length),

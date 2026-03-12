@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Aesthetic Issues Fixture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Georgia, serif;
+        background: #f7efe4;
+        color: #23180f;
+      }
+
+      .hero {
+        padding: 18px 20px 110px;
+        background: linear-gradient(135deg, #ffcb77, #fe6d73);
+      }
+
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: 52px;
+      }
+
+      .hero p {
+        max-width: 32rem;
+        font-size: 13px;
+        line-height: 1.1;
+      }
+
+      .hero a {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 7px 11px;
+        background: #1d3557;
+        color: #fff;
+        text-decoration: none;
+      }
+
+      .feature-row {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        padding: 8px 14px 84px;
+      }
+
+      .feature {
+        padding: 9px;
+        background: #fff;
+        border: 1px solid #dbc9ac;
+      }
+
+      .feature h3 {
+        margin: 0 0 6px;
+        font-size: 27px;
+      }
+
+      .feature p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.15;
+      }
+
+      .detail-band {
+        padding: 20px 22px;
+        background: #214e34;
+        color: #f5f1e8;
+      }
+
+      .detail-band h4 {
+        font-size: 18px;
+        margin: 0 0 6px;
+      }
+
+      .detail-band p {
+        max-width: 72rem;
+        font-size: 14px;
+        line-height: 1.12;
+      }
+
+      .crowded-grid {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 6px;
+        padding: 10px;
+      }
+
+      .crowded-grid div {
+        min-height: 72px;
+        padding: 8px;
+        background: #d62828;
+        color: #fff;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="hero">
+      <h1>Fast launch. Uneven polish.</h1>
+      <p>
+        This fixture intentionally mixes large jumps in spacing, inconsistent type sizes, and a visually crowded lower
+        section so the inspect heuristics have clear failure modes to flag.
+      </p>
+      <a href="#demo">Start now</a>
+    </section>
+    <section class="feature-row">
+      <article class="feature">
+        <h3>Huge card title</h3>
+        <p>Short copy.</p>
+      </article>
+      <article class="feature">
+        <h3>Another jump</h3>
+        <p>Short copy.</p>
+      </article>
+      <article class="feature">
+        <h3>Compressed text</h3>
+        <p>Short copy.</p>
+      </article>
+      <article class="feature">
+        <h3>More noise</h3>
+        <p>Short copy.</p>
+      </article>
+    </section>
+    <section class="detail-band">
+      <h4>Dense supporting details</h4>
+      <p>
+        The line height is intentionally tight and the section runs wider than comfortable reading measure, which should
+        register as density pressure and weaker polish in the aesthetics summary.
+      </p>
+    </section>
+    <section class="crowded-grid" id="demo">
+      <div>1</div>
+      <div>2</div>
+      <div>3</div>
+      <div>4</div>
+      <div>5</div>
+      <div>6</div>
+      <div>7</div>
+      <div>8</div>
+      <div>9</div>
+      <div>10</div>
+      <div>11</div>
+      <div>12</div>
+    </section>
+  </body>
+</html>

@@ -85,6 +85,58 @@ render-loop render \
   --wait-for-selector .ready
 ```
 
+Inspect a page for aesthetic heuristics:
+
+```bash
+render-loop render \
+  --html-file ./fixtures/aesthetic-issues.html \
+  --output inspect \
+  --out ./out/aesthetic-report.json
+```
+
+Run the inspect audit across multiple viewports:
+
+```bash
+render-loop render \
+  --html-file ./fixtures/aesthetic-issues.html \
+  --output responsive \
+  --responsive '{"includeScreenshots":false,"viewports":[{"name":"desktop","width":1440,"height":1100},{"name":"mobile","width":390,"height":844}]}' \
+  --out ./out/aesthetic-responsive.json
+```
+
+Split a tall screenshot into selected patch images:
+
+```bash
+render-loop render \
+  --html-file ./fixtures/aesthetic-issues.html \
+  --output patches \
+  --patch-width 512 \
+  --patch-height 512 \
+  --patch-include 0,3,4 \
+  --out ./out/aesthetic-patches.json
+```
+
+Compare a fresh render against a saved baseline:
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output diff \
+  --diff-base-image ./out/card-baseline.png \
+  --diff-threshold 16 \
+  --out ./out/card-diff.json
+```
+
+Capture hover or focus states as a JSON image set:
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output states \
+  --states '{"includeBase":true,"actions":[{"name":"hover-cta","type":"hover","selector":".cta"},{"name":"focus-email","type":"focus","selector":"input[name=email]"}]}' \
+  --out ./out/card-states.json
+```
+
 Render an inline HTML fragment:
 
 ```bash
@@ -115,6 +167,61 @@ Request body:
 }
 ```
 
+Patch request example:
+
+```json
+{
+  "url": "https://example.com",
+  "output": "patches",
+  "viewport": {
+    "width": 1280,
+    "height": 720,
+    "deviceScaleFactor": 1
+  },
+  "patches": {
+    "width": 512,
+    "height": 512,
+    "include": [0, 3, 4]
+  }
+}
+```
+
+Responsive request example:
+
+```json
+{
+  "url": "https://example.com",
+  "output": "responsive",
+  "responsive": {
+    "includeScreenshots": false,
+    "viewports": [
+      { "name": "desktop", "width": 1440, "height": 1100 },
+      { "name": "mobile", "width": 390, "height": 844 }
+    ]
+  }
+}
+```
+
+State capture request example:
+
+```json
+{
+  "url": "https://example.com",
+  "output": "states",
+  "states": {
+    "includeBase": true,
+    "actions": [
+      { "name": "hover-cta", "type": "hover", "selector": ".cta" },
+      { "name": "focus-email", "type": "focus", "selector": "input[name=email]" }
+    ]
+  }
+}
+```
+
+When `outputPath` is set for `inspect`, `patches`, `responsive`, `diff`, or
+`states`, the daemon writes the JSON artifact to that path and the HTTP response
+contains metadata plus the `outputPath`, not the full JSON payload inline.
+
 Supported source fields:
 
 - `url`
@@ -127,12 +234,23 @@ Supported outputs:
 - `screenshot`
 - `pdf`
 - `html`
+- `inspect`
+- `patches`
+- `responsive`
+- `diff`
+- `states`
 
 Server behavior:
 
 - reuses one browser across many jobs
 - creates a fresh browser context for each job
 - captures console messages, page errors, and failed network requests
+- returns structured aesthetic analysis JSON for `output: "inspect"`
+- includes contrast, overflow, tap target, asset, and lightweight accessibility checks inside `inspect`
+- returns structured patch manifests with base64 tile images and an overview thumbnail for `output: "patches"`
+- runs the inspect audit across multiple viewports for `output: "responsive"`
+- compares a fresh render against a baseline image for `output: "diff"`
+- captures sequential hover, focus, or click screenshots for `output: "states"`
 - exposes `GET /health` and `GET /stats`
 - recycles the browser after `--recycle-every` jobs
 

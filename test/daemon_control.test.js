@@ -1,5 +1,4 @@
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -25,7 +24,9 @@ test("defaultStateFilePath falls back to XDG state home", () => {
 });
 
 test("waitForDaemonReady resolves once state is readable and healthy", async () => {
-  const stateFile = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "render-loop-state-")), "daemon.json");
+  const tempRoot = path.resolve(".tmp-tests");
+  await fs.mkdir(tempRoot, { recursive: true });
+  const stateFile = path.join(await fs.mkdtemp(path.join(tempRoot, "render-loop-state-")), "daemon.json");
 
   const pending = waitForDaemonReady({
     stateFile,
@@ -50,7 +51,9 @@ test("waitForDaemonReady resolves once state is readable and healthy", async () 
 });
 
 test("ensureDaemonRunning reuses a healthy daemon from state", async () => {
-  const stateFile = path.join(await fs.mkdtemp(path.join(os.tmpdir(), "render-loop-state-")), "daemon.json");
+  const tempRoot = path.resolve(".tmp-tests");
+  await fs.mkdir(tempRoot, { recursive: true });
+  const stateFile = path.join(await fs.mkdtemp(path.join(tempRoot, "render-loop-state-")), "daemon.json");
   await fs.mkdir(path.dirname(stateFile), { recursive: true });
   await fs.writeFile(
     stateFile,
@@ -76,7 +79,9 @@ test("ensureDaemonRunning reuses a healthy daemon from state", async () => {
 });
 
 test("ensureDaemonRunning spawns and waits when state is stale", async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "render-loop-state-"));
+  const tempRoot = path.resolve(".tmp-tests");
+  await fs.mkdir(tempRoot, { recursive: true });
+  const dir = await fs.mkdtemp(path.join(tempRoot, "render-loop-state-"));
   const stateFile = path.join(dir, "daemon.json");
   await fs.mkdir(path.dirname(stateFile), { recursive: true });
   await fs.writeFile(

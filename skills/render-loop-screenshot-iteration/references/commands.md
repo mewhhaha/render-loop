@@ -29,6 +29,15 @@ render-loop render \
   --wait-for-selector .ready
 ```
 
+## Render a Focused Region
+
+```bash
+render-loop render \
+  --entry-file ./preview/index.html \
+  --out ./out/preview-hero.png \
+  --selector .hero
+```
+
 ## Render a Mobile Variant
 
 ```bash
@@ -57,8 +66,60 @@ render-loop render \
   --wait-for networkidle
 ```
 
+## Inspect Aesthetics
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output inspect \
+  --out ./out/card-inspect.json
+```
+
+## Run A Responsive Inspect Sweep
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output responsive \
+  --responsive '{"includeScreenshots":false,"viewports":[{"name":"desktop","width":1440,"height":1100},{"name":"mobile","width":390,"height":844}]}' \
+  --out ./out/card-responsive.json
+```
+
+## Return Screenshot Patches
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output patches \
+  --patch-width 512 \
+  --patch-height 512 \
+  --patch-include 0,3,4 \
+  --out ./out/card-patches.json
+```
+
+## Compare Against A Baseline
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output diff \
+  --diff-base-image ./out/card-baseline.png \
+  --diff-threshold 16 \
+  --out ./out/card-diff.json
+```
+
+## Capture Hover And Focus States
+
+```bash
+render-loop render \
+  --html-file ./fixtures/card.html \
+  --output states \
+  --states '{"includeBase":true,"actions":[{"name":"hover-cta","type":"hover","selector":".cta"},{"name":"focus-email","type":"focus","selector":"input[name=email]"}]}' \
+  --out ./out/card-states.json
+```
+
 ## Review Loop
 
 1. Edit files.
 2. Re-run the same render command to the same output path.
-3. Open the updated image and critique the result.
+3. Open the updated image or read the updated JSON artifact and critique the result.

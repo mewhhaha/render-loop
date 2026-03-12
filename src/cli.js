@@ -18,10 +18,13 @@ function printUsage() {
 Commands:
   render-loop serve [--host 127.0.0.1] [--port 4217|0] [--concurrency 2] [--recycle-every 100]
   render-loop render [--host HOST] [--port PORT] (--url URL | --html-file FILE | --entry-file FILE | --html HTML)
-                     [--out FILE] [--output screenshot|pdf|html] [--selector CSS]
+                     [--out FILE] [--output screenshot|pdf|html|inspect|patches|responsive|diff|states] [--selector CSS]
                      [--width 1280] [--height 720] [--scale 1]
                      [--wait-for load|domcontentloaded|networkidle|commit]
                      [--wait-for-selector CSS] [--wait-for-timeout MS]
+                     [--patch-width PX] [--patch-height PX] [--patch-include 0,3,4]
+                     [--responsive JSON] [--diff-base-image FILE] [--diff-threshold N]
+                     [--diff-include-image true|false] [--states JSON]
   render-loop health [--host HOST] [--port PORT]
   render-loop stop
 `);

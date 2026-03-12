@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
 import { chromium } from "playwright";
 import { AssetServer } from "./asset_server.js";
+import { createDiffArtifact } from "./diff.js";
 import { HttpError } from "./errors.js";
+import { createInspectArtifact } from "./inspect.js";
+import { createPatchesArtifact } from "./patches.js";
 import { JobQueue } from "./queue.js";
+import { createStateCaptureArtifact } from "./states.js";
 
 function nowMs() {
   return Number(process.hrtime.bigint() / 1_000_000n);
@@ -47,6 +51,30 @@ async function maybeTargetLocator(page, selector) {
   const locator = page.locator(selector).first();
   await locator.waitFor();
   return locator;
+}
+
+async function ensureInspectLocator(page, locator) {
+  if (locator) {
+    return locator;
+  }
+  const bodyLocator = page.locator("body").first();
+  await bodyLocator.waitFor();
+  return bodyLocator;
+}
+
+function serializeJson(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+}
+
+function buildViewportRequest(request, viewport) {
+  return {
+    ...request,
+    viewport: {
+      width: viewport.width,
+      height: viewport.height,
+      deviceScaleFactor: viewport.deviceScaleFactor ?? request.viewport.deviceScaleFactor,
+    },
+  };
 }
 
 export class RenderService {
@@ -174,15 +202,7 @@ export class RenderService {
     throw new HttpError(400, "missing render source");
   }
 
-  async #renderNow(request) {
-    await this.#recycleBrowserIfNeeded();
-
-    const startMs = nowMs();
-    this.activeJobs += 1;
-    const reusedBrowser = Boolean(this.browser && this.browser.isConnected() && !this.browserDisconnected);
-    const browser = await this.#ensureBrowser();
-    const browserGeneration = this.browserGeneration;
-
+  async #runPageSession(browser, request, handler) {
     const contextStartMs = nowMs();
     const context = await browser.newContext({
       viewport: {
@@ -241,45 +261,16 @@ export class RenderService {
           "navigation",
         );
         const gotoMs = nowMs() - gotoStartMs;
-
         const renderStartMs = nowMs();
-        const locator = await maybeTargetLocator(page, request.selector);
-
-        let bytes;
-        let contentType;
-        let text;
-        if (request.output === "screenshot") {
-          bytes = locator
-            ? await locator.screenshot({ type: "png" })
-            : await page.screenshot({
-                type: "png",
-                fullPage: request.fullPage,
-                clip: request.clip,
-              });
-          contentType = "image/png";
-        } else if (request.output === "pdf") {
-          await page.emulateMedia({ media: request.emulateMedia ?? "print" });
-          bytes = await page.pdf({ printBackground: true });
-          contentType = "application/pdf";
-        } else {
-          text = await page.content();
-          bytes = Buffer.from(text, "utf8");
-          contentType = "text/html; charset=utf-8";
-        }
+        const result = await handler({
+          page,
+          consoleMessages,
+          pageErrors,
+          requestFailures,
+        });
         const renderMs = nowMs() - renderStartMs;
-
-        this.completedJobs += 1;
-        if (this.recycleEvery > 0 && this.completedJobs % this.recycleEvery === 0) {
-          this.pendingRecycle = true;
-        }
-
         return {
-          ok: true,
-          reusedBrowser,
-          browserGeneration,
-          contentType,
-          bytes,
-          text,
+          ...result,
           consoleMessages,
           pageErrors,
           requestFailures,
@@ -287,7 +278,6 @@ export class RenderService {
             contextMs,
             gotoMs,
             renderMs,
-            totalMs: nowMs() - startMs,
           },
         };
       } finally {
@@ -295,6 +285,269 @@ export class RenderService {
       }
     } finally {
       await context.close().catch(() => {});
+    }
+  }
+
+  async #runSingleOutput(browser, request, reusedBrowser, browserGeneration, startMs) {
+    const session = await this.#runPageSession(browser, request, async ({ page, consoleMessages, pageErrors, requestFailures }) => {
+      const locator = await maybeTargetLocator(page, request.selector);
+
+      if (request.output === "screenshot") {
+        return {
+          contentType: "image/png",
+          bytes: locator
+            ? await locator.screenshot({ type: "png" })
+            : await page.screenshot({
+                type: "png",
+                fullPage: request.fullPage,
+                clip: request.clip,
+              }),
+        };
+      }
+
+      if (request.output === "pdf") {
+        await page.emulateMedia({ media: request.emulateMedia ?? "print" });
+        return {
+          contentType: "application/pdf",
+          bytes: await page.pdf({ printBackground: true }),
+        };
+      }
+
+      if (request.output === "html") {
+        const text = await page.content();
+        return {
+          contentType: "text/html; charset=utf-8",
+          text,
+          bytes: Buffer.from(text, "utf8"),
+        };
+      }
+
+      if (request.output === "inspect") {
+        const inspectLocator = await ensureInspectLocator(page, locator);
+        const inspectResult = await createInspectArtifact({
+          page,
+          targetLocator: inspectLocator,
+          request,
+          consoleMessages,
+          pageErrors,
+          requestFailures,
+        });
+        return {
+          contentType: inspectResult.contentType,
+          jsonBody: {
+            analysis: inspectResult.analysis,
+          },
+        };
+      }
+
+      if (request.output === "patches") {
+        const screenshotBytes = locator
+          ? await locator.screenshot({ type: "png" })
+          : await page.screenshot({
+              type: "png",
+              fullPage: request.fullPage,
+              clip: request.clip,
+            });
+        const patchResult = await createPatchesArtifact({
+          page,
+          screenshotBytes,
+          patches: request.patches,
+        });
+        return {
+          contentType: patchResult.contentType,
+          jsonBody: {
+            patches: patchResult.patches,
+          },
+        };
+      }
+
+      if (request.output === "diff") {
+        const screenshotBytes = locator
+          ? await locator.screenshot({ type: "png" })
+          : await page.screenshot({
+              type: "png",
+              fullPage: request.fullPage,
+              clip: request.clip,
+            });
+        const baselineScreenshotBytes = await fs.readFile(request.diff.baseImagePath);
+        const diffResult = await createDiffArtifact({
+          page,
+          currentScreenshotBytes: screenshotBytes,
+          baselineScreenshotBytes,
+          diff: request.diff,
+        });
+        return {
+          contentType: diffResult.contentType,
+          jsonBody: {
+            diff: diffResult.diff,
+          },
+        };
+      }
+
+      if (request.output === "states") {
+        const stateResult = await createStateCaptureArtifact({
+          page,
+          request,
+          states: request.states,
+        });
+        return {
+          contentType: stateResult.contentType,
+          jsonBody: {
+            states: stateResult.states,
+          },
+        };
+      }
+
+      throw new HttpError(400, `unsupported output: ${request.output}`);
+    });
+
+    const totalMs = nowMs() - startMs;
+    const payload = session.jsonBody
+      ? {
+          ok: true,
+          reusedBrowser,
+          browserGeneration,
+          contentType: session.contentType,
+          consoleMessages: session.consoleMessages,
+          pageErrors: session.pageErrors,
+          requestFailures: session.requestFailures,
+          timing: {
+            ...session.timing,
+            totalMs,
+          },
+          ...session.jsonBody,
+        }
+      : null;
+
+    return {
+      ok: true,
+      reusedBrowser,
+      browserGeneration,
+      contentType: session.contentType,
+      bytes: payload ? serializeJson(payload) : session.bytes,
+      text: session.text,
+      consoleMessages: session.consoleMessages,
+      pageErrors: session.pageErrors,
+      requestFailures: session.requestFailures,
+      timing: {
+        ...session.timing,
+        totalMs,
+      },
+    };
+  }
+
+  async #runResponsiveOutput(browser, request, reusedBrowser, browserGeneration, startMs) {
+    const items = [];
+    const consoleMessages = [];
+    const pageErrors = [];
+    const requestFailures = [];
+    let contextMs = 0;
+    let gotoMs = 0;
+    let renderMs = 0;
+
+    for (const viewport of request.responsive.viewports) {
+      const viewportRequest = buildViewportRequest(request, viewport);
+      const session = await this.#runPageSession(browser, viewportRequest, async ({ page, consoleMessages: pageConsoleMessages, pageErrors: pageSessionErrors, requestFailures: pageRequestFailures }) => {
+        const locator = await maybeTargetLocator(page, request.selector);
+        const inspectLocator = await ensureInspectLocator(page, locator);
+        const inspectResult = await createInspectArtifact({
+          page,
+          targetLocator: inspectLocator,
+          request: viewportRequest,
+          consoleMessages: pageConsoleMessages,
+          pageErrors: pageSessionErrors,
+          requestFailures: pageRequestFailures,
+        });
+        const screenshotBase64 = request.responsive.includeScreenshots
+          ? (await page.screenshot({
+              type: "png",
+              fullPage: request.fullPage,
+              clip: request.clip,
+            })).toString("base64")
+          : undefined;
+        return {
+          contentType: "application/json; charset=utf-8",
+          jsonBody: {
+            name: viewport.name,
+            viewport: viewportRequest.viewport,
+            analysis: inspectResult.analysis,
+            screenshotBase64,
+            consoleMessages: pageConsoleMessages,
+            pageErrors: pageSessionErrors,
+            requestFailures: pageRequestFailures,
+          },
+        };
+      });
+
+      contextMs += session.timing.contextMs;
+      gotoMs += session.timing.gotoMs;
+      renderMs += session.timing.renderMs;
+      consoleMessages.push(...session.consoleMessages);
+      pageErrors.push(...session.pageErrors);
+      requestFailures.push(...session.requestFailures);
+      items.push(session.jsonBody);
+    }
+
+    const totalMs = nowMs() - startMs;
+    const worst = items.slice().sort((left, right) => left.analysis.summary.overallScore - right.analysis.summary.overallScore)[0];
+    const payload = {
+      ok: true,
+      reusedBrowser,
+      browserGeneration,
+      contentType: "application/json; charset=utf-8",
+      consoleMessages,
+      pageErrors,
+      requestFailures,
+      timing: {
+        contextMs,
+        gotoMs,
+        renderMs,
+        totalMs,
+      },
+      responsive: {
+        includeScreenshots: request.responsive.includeScreenshots,
+        items,
+        summary: {
+          worstViewport: worst?.name,
+          worstScore: worst?.analysis.summary.overallScore,
+          primarySignals: worst?.analysis.summary.primarySignals ?? [],
+        },
+      },
+    };
+
+    return {
+      ok: true,
+      reusedBrowser,
+      browserGeneration,
+      contentType: payload.contentType,
+      bytes: serializeJson(payload),
+      consoleMessages,
+      pageErrors,
+      requestFailures,
+      timing: payload.timing,
+    };
+  }
+
+  async #renderNow(request) {
+    await this.#recycleBrowserIfNeeded();
+
+    const startMs = nowMs();
+    this.activeJobs += 1;
+    const reusedBrowser = Boolean(this.browser && this.browser.isConnected() && !this.browserDisconnected);
+    const browser = await this.#ensureBrowser();
+    const browserGeneration = this.browserGeneration;
+
+    try {
+      const result = request.output === "responsive"
+        ? await this.#runResponsiveOutput(browser, request, reusedBrowser, browserGeneration, startMs)
+        : await this.#runSingleOutput(browser, request, reusedBrowser, browserGeneration, startMs);
+
+      this.completedJobs += 1;
+      if (this.recycleEvery > 0 && this.completedJobs % this.recycleEvery === 0) {
+        this.pendingRecycle = true;
+      }
+      return result;
+    } finally {
       this.activeJobs -= 1;
       await this.#recycleBrowserIfNeeded();
     }
